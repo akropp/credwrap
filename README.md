@@ -323,4 +323,4 @@ MIT
 
 ## Contributing
 
-Issues and PRs welcome at https://github.com/openclaw/credwrap
+Issues and PRs welcome at https://github.com/akropp/credwrap
