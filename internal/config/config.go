@@ -28,8 +28,10 @@ type ServerConfig struct {
 
 // AuthConfig defines authentication options.
 type AuthConfig struct {
-	Tokens         []string `yaml:"tokens"`          // Allowed tokens
-	TailscaleNodes []string `yaml:"tailscale_nodes"` // Allowed Tailscale node IDs (optional)
+	Tokens         []string `yaml:"tokens"`           // Allowed tokens
+	TailscaleNodes []string `yaml:"tailscale_nodes"`  // Allowed Tailscale node IDs (optional)
+	AllowedIPs     []string `yaml:"allowed_ips"`      // Allowed IP addresses or CIDR ranges
+	RequireToken   bool     `yaml:"require_token"`    // If false, IP/Tailscale auth alone is sufficient
 }
 
 // Tool defines an allowed tool and its credential mappings.

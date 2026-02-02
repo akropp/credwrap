@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"sync"
@@ -264,14 +265,115 @@ func (s *Server) streamOutput(encoder *json.Encoder, r io.Reader, outputType str
 }
 
 func (s *Server) authenticate(token string, remoteAddr string) bool {
+	tokenValid := false
+	ipValid := false
+	tailscaleValid := false
+
 	// Check token
 	for _, t := range s.cfg.Auth.Tokens {
 		if token == t {
-			return true
+			tokenValid = true
+			break
 		}
 	}
-	// TODO: Check Tailscale node identity
-	return false
+
+	// Check IP whitelist
+	if len(s.cfg.Auth.AllowedIPs) > 0 {
+		clientIP := extractIP(remoteAddr)
+		for _, allowed := range s.cfg.Auth.AllowedIPs {
+			if matchIP(clientIP, allowed) {
+				ipValid = true
+				break
+			}
+		}
+	} else {
+		// No IP whitelist = all IPs allowed
+		ipValid = true
+	}
+
+	// Check Tailscale node identity
+	if len(s.cfg.Auth.TailscaleNodes) > 0 {
+		nodeID := s.getTailscaleNodeID(remoteAddr)
+		for _, allowed := range s.cfg.Auth.TailscaleNodes {
+			if nodeID == allowed {
+				tailscaleValid = true
+				break
+			}
+		}
+	}
+
+	// Auth logic:
+	// - If require_token is true (default), token must be valid AND (IP or Tailscale must be valid)
+	// - If require_token is false, either token OR IP whitelist OR Tailscale is sufficient
+	if s.cfg.Auth.RequireToken || len(s.cfg.Auth.Tokens) > 0 && len(s.cfg.Auth.AllowedIPs) == 0 && len(s.cfg.Auth.TailscaleNodes) == 0 {
+		// Token required
+		return tokenValid && ipValid
+	}
+
+	// Token not required - any valid auth method works
+	return tokenValid || (ipValid && len(s.cfg.Auth.AllowedIPs) > 0) || tailscaleValid
+}
+
+// extractIP gets the IP address from a "host:port" string
+func extractIP(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return remoteAddr
+	}
+	return host
+}
+
+// matchIP checks if an IP matches an allowed IP or CIDR range
+func matchIP(clientIP, allowed string) bool {
+	// Check exact match first
+	if clientIP == allowed {
+		return true
+	}
+
+	// Check CIDR
+	_, cidr, err := net.ParseCIDR(allowed)
+	if err != nil {
+		return false
+	}
+
+	ip := net.ParseIP(clientIP)
+	if ip == nil {
+		return false
+	}
+
+	return cidr.Contains(ip)
+}
+
+// getTailscaleNodeID queries Tailscale local API for the node ID of a peer
+func (s *Server) getTailscaleNodeID(remoteAddr string) string {
+	clientIP := extractIP(remoteAddr)
+	
+	// Query Tailscale local API
+	// GET http://100.100.100.100/localapi/v0/whois?addr=<ip>:1
+	url := fmt.Sprintf("http://100.100.100.100/localapi/v0/whois?addr=%s:1", clientIP)
+	
+	resp, err := http.Get(url)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return ""
+	}
+
+	var whois struct {
+		Node struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"Node"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&whois); err != nil {
+		return ""
+	}
+
+	return whois.Node.ID
 }
 
 func (s *Server) sendError(encoder *json.Encoder, msg string) {

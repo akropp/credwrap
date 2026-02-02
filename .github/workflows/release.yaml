@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build all platforms
+        run: |
+          mkdir -p dist
+          VERSION=${GITHUB_REF_NAME}
+          LDFLAGS="-s -w -X main.version=${VERSION}"
+          
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/credwrap-linux-amd64 ./cmd/credwrap
+          GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/credwrap-server-linux-amd64 ./cmd/credwrap-server
+          
+          # Linux arm64
+          GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/credwrap-linux-arm64 ./cmd/credwrap
+          GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/credwrap-server-linux-arm64 ./cmd/credwrap-server
+          
+          # macOS amd64
+          GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/credwrap-darwin-amd64 ./cmd/credwrap
+          GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/credwrap-server-darwin-amd64 ./cmd/credwrap-server
+          
+          # macOS arm64
+          GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/credwrap-darwin-arm64 ./cmd/credwrap
+          GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/credwrap-server-darwin-arm64 ./cmd/credwrap-server
+          
+          # Create tarballs
+          cd dist
+          for f in credwrap-* credwrap-server-*; do
+            tar czf "${f}.tar.gz" "$f"
+            rm "$f"
+          done
+          
+          # Create checksums
+          sha256sum *.tar.gz > checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          generate_release_notes: true
