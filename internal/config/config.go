@@ -2,10 +2,13 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 
+	"filippo.io/age"
 	"gopkg.in/yaml.v3"
 )
 
@@ -111,9 +114,36 @@ func LoadCredentials(path string) (map[string]string, error) {
 }
 
 // LoadCredentialsEncrypted loads credentials from an age-encrypted file.
-// TODO: Implement age decryption
 func LoadCredentialsEncrypted(path string, password string) (map[string]string, error) {
-	// For now, fall back to plaintext
-	// Will implement age decryption here
-	return LoadCredentials(path)
+	// Read encrypted file
+	encData, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading encrypted credentials: %w", err)
+	}
+
+	// Create identity from password
+	identity, err := age.NewScryptIdentity(password)
+	if err != nil {
+		return nil, fmt.Errorf("creating identity: %w", err)
+	}
+
+	// Decrypt
+	reader, err := age.Decrypt(bytes.NewReader(encData), identity)
+	if err != nil {
+		return nil, fmt.Errorf("decrypting credentials (wrong password?): %w", err)
+	}
+
+	// Read decrypted data
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("reading decrypted data: %w", err)
+	}
+
+	// Parse YAML
+	var creds map[string]string
+	if err := yaml.Unmarshal(data, &creds); err != nil {
+		return nil, fmt.Errorf("parsing credentials: %w", err)
+	}
+
+	return creds, nil
 }

@@ -147,21 +147,48 @@ Every command is logged:
 }
 ```
 
-## Encryption (Coming Soon)
+## Encryption
 
-Encrypt credentials with age:
+Credentials should be encrypted at rest using [age](https://github.com/FiloSottile/age).
+
+### Install age
 
 ```bash
-age -p credentials.yaml > credentials.enc
+# macOS
+brew install age
+
+# Debian/Ubuntu
+apt install age
+
+# From source
+go install filippo.io/age/cmd/age@latest
 ```
 
-Start server with password:
+### Encrypt your credentials
+
+```bash
+# Using the helper script
+./scripts/encrypt-credentials.sh credentials.yaml credentials.enc
+
+# Or directly with age
+age -p -o credentials.enc credentials.yaml
+```
+
+### Start server with encrypted credentials
 
 ```bash
 credwrap-server --config config.yaml \
                 --credentials credentials.enc \
                 --encrypted
+# Enter decryption password when prompted
 ```
+
+### Security notes
+
+- The password is only held in memory while the server runs
+- Credentials are decrypted once at startup, never written to disk
+- Use a strong password (the encryption is scrypt-based)
+- Delete the plaintext credentials.yaml after encrypting
 
 ## License
 

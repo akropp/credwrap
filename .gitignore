@@ -1,0 +1,33 @@
+# Binaries
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+test/audit.log
+test/credentials.yaml
+*.log
+
+# Go
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials (never commit these!)
+credentials.yaml
+credentials.enc
+*.pem
+*.key
