@@ -367,6 +367,68 @@ sudo credwrap-server tools add /etc/credwrap/config.yaml gemini \
     /usr/bin/gemini --no-copy --env GEMINI_API_KEY
 ```
 
+### Separate-user mode: Tool-specific notes
+
+When running credwrap-server as a separate user (e.g., `credwrap`), some tools need extra configuration because they look for config files in `$HOME` or need to write temp files.
+
+**Systemd hardening adjustments:**
+
+The setup script enables security hardening. For tools that need access to user home directories or need to write files, edit the service:
+
+```bash
+sudo systemctl edit credwrap
+```
+
+```ini
+[Service]
+# Allow reading from /home (for tools that need user configs)
+ProtectHome=read-only
+
+# Allow writing to credwrap's home (for tools that write temp/state)
+ReadWritePaths=/var/log/credwrap /var/lib/credwrap
+```
+
+**gog (Google Workspace CLI):**
+
+gog needs access to its config directory (`~/.config/gogcli/`). Options:
+
+1. Set `XDG_CONFIG_HOME` to point to your config:
+   ```yaml
+   gog:
+     path: /usr/local/bin/gog
+     env:
+       XDG_CONFIG_HOME: /home/youruser/.config
+     credentials:
+       - env: GOG_KEYRING_PASSWORD
+         secret: gog-keyring-password
+     pass_args: true
+   ```
+
+2. Or copy your gog config to the credwrap user's home:
+   ```bash
+   sudo cp -r ~/.config/gogcli /var/lib/credwrap/.config/
+   sudo chown -R credwrap:credwrap /var/lib/credwrap/.config
+   ```
+
+**gemini (Google Gemini CLI):**
+
+gemini needs to write temp files and chat history. Ensure `/var/lib/credwrap` is writable (see systemd adjustments above). The credwrap user's HOME is already `/var/lib/credwrap`, so no extra env config needed.
+
+**bird (Twitter/X CLI):**
+
+bird works out of the box if installed globally (`sudo npm install -g @steipete/bird`). Needs `AUTH_TOKEN` and `CT0` credentials:
+
+```yaml
+bird:
+  path: /usr/bin/bird
+  credentials:
+    - env: AUTH_TOKEN
+      secret: auth-token
+    - env: CT0
+      secret: ct0
+  pass_args: true
+```
+
 ## License
 
 MIT

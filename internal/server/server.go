@@ -143,8 +143,15 @@ func (s *Server) handleExec(conn net.Conn, remoteAddr string, req *protocol.Exec
 		return
 	}
 
-	// Build environment with credentials
+	// Build environment with static env vars and credentials
 	env := os.Environ()
+	
+	// Add static env vars from tool config
+	for k, v := range tool.Env {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	}
+	
+	// Add credentials
 	for _, cred := range tool.Credentials {
 		if cred.Env != "" {
 			value, ok := s.cfg.Credentials[cred.Secret]

@@ -36,10 +36,11 @@ type AuthConfig struct {
 
 // Tool defines an allowed tool and its credential mappings.
 type Tool struct {
-	Path        string       `yaml:"path"`                   // Full path to executable
-	Credentials []Credential `yaml:"credentials,omitempty"`  // Credentials to inject
-	PassArgs    bool         `yaml:"pass_args"`              // Allow arbitrary args
-	ArgsPattern string       `yaml:"args_pattern,omitempty"` // Regex to validate args
+	Path        string            `yaml:"path"`                   // Full path to executable
+	Credentials []Credential      `yaml:"credentials,omitempty"`  // Credentials to inject
+	Env         map[string]string `yaml:"env,omitempty"`          // Static environment variables
+	PassArgs    bool              `yaml:"pass_args"`              // Allow arbitrary args
+	ArgsPattern string            `yaml:"args_pattern,omitempty"` // Regex to validate args
 
 	argsRegex *regexp.Regexp // Compiled regex
 }
