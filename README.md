@@ -190,6 +190,50 @@ credwrap-server --config config.yaml \
 - Use a strong password (the encryption is scrypt-based)
 - Delete the plaintext credentials.yaml after encrypting
 
+## Production Deployment
+
+For maximum security, run the server as a separate user:
+
+```bash
+# Download and run setup script
+curl -sL https://raw.githubusercontent.com/akropp/credwrap/main/scripts/setup-server.sh | sudo bash
+
+# Or with options
+sudo ./scripts/setup-server.sh --user credwrap --port 9876 --bind 127.0.0.1
+```
+
+This creates:
+- System user `credwrap` (no login shell)
+- Config at `/etc/credwrap/config.yaml`
+- Credentials at `/etc/credwrap/credentials.yaml`
+- Systemd service `credwrap.service`
+- Audit log at `/var/log/credwrap/audit.log`
+
+### Systemd commands
+
+```bash
+sudo systemctl start credwrap     # Start
+sudo systemctl stop credwrap      # Stop
+sudo systemctl restart credwrap   # Restart
+sudo systemctl status credwrap    # Check status
+sudo journalctl -u credwrap -f    # View logs
+```
+
+### Agent user setup
+
+The agent user (e.g., `clawd`) only needs the client config:
+
+```yaml
+# ~/.credwrap.yaml
+server: "127.0.0.1:9876"
+token: "your-token-from-server-config"
+```
+
+The agent can execute `credwrap <tool> [args]` but cannot:
+- Read `/etc/credwrap/credentials.yaml` (wrong user)
+- Query the server for credential values (no such API)
+- Execute tools not in the allowlist
+
 ## License
 
 MIT
