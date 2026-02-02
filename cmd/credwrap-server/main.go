@@ -124,43 +124,66 @@ func main() {
 
 func handleSecretsCommand() {
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: credwrap-server secrets <command> [args]")
+		fmt.Println("Usage: credwrap-server secrets <command> [args] [--keyfile FILE]")
 		fmt.Println("")
 		fmt.Println("Commands:")
 		fmt.Println("  init FILE        Create new encrypted credentials file")
 		fmt.Println("  add FILE KEY     Add/update a secret")
 		fmt.Println("  list FILE        List secret names (not values)")
 		fmt.Println("  rm FILE KEY      Remove a secret")
+		fmt.Println("")
+		fmt.Println("Options:")
+		fmt.Println("  --keyfile FILE   Use password from keyfile instead of prompting")
+		fmt.Println("")
+		fmt.Println("Auto-detection: if no --keyfile is given, looks for:")
+		fmt.Println("  1. <credentials-file>.keyfile")
+		fmt.Println("  2. keyfile in same directory as credentials")
 		os.Exit(1)
 	}
 
-	cmd := os.Args[2]
+	// Parse --keyfile from args
+	var keyfilePath string
+	args := []string{}
+	for i := 2; i < len(os.Args); i++ {
+		if os.Args[i] == "--keyfile" && i+1 < len(os.Args) {
+			keyfilePath = os.Args[i+1]
+			i++
+		} else {
+			args = append(args, os.Args[i])
+		}
+	}
+
+	if len(args) < 1 {
+		log.Fatal("Missing command")
+	}
+
+	cmd := args[0]
 	var err error
 
 	switch cmd {
 	case "init":
-		if len(os.Args) < 4 {
-			log.Fatal("Usage: credwrap-server secrets init FILE")
+		if len(args) < 2 {
+			log.Fatal("Usage: credwrap-server secrets init FILE [--keyfile FILE]")
 		}
-		err = initCredentials(os.Args[3])
+		err = initCredentials(args[1], keyfilePath)
 
 	case "add":
-		if len(os.Args) < 5 {
-			log.Fatal("Usage: credwrap-server secrets add FILE KEY")
+		if len(args) < 3 {
+			log.Fatal("Usage: credwrap-server secrets add FILE KEY [--keyfile FILE]")
 		}
-		err = addSecret(os.Args[3], os.Args[4])
+		err = addSecret(args[1], args[2], keyfilePath)
 
 	case "list":
-		if len(os.Args) < 4 {
-			log.Fatal("Usage: credwrap-server secrets list FILE")
+		if len(args) < 2 {
+			log.Fatal("Usage: credwrap-server secrets list FILE [--keyfile FILE]")
 		}
-		err = listSecrets(os.Args[3])
+		err = listSecrets(args[1], keyfilePath)
 
 	case "rm", "remove", "delete":
-		if len(os.Args) < 5 {
-			log.Fatal("Usage: credwrap-server secrets rm FILE KEY")
+		if len(args) < 3 {
+			log.Fatal("Usage: credwrap-server secrets rm FILE KEY [--keyfile FILE]")
 		}
-		err = removeSecret(os.Args[3], os.Args[4])
+		err = removeSecret(args[1], args[2], keyfilePath)
 
 	default:
 		log.Fatalf("Unknown secrets command: %s", cmd)

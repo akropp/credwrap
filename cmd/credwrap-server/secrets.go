@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -14,9 +15,82 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// getPassword gets the encryption password from keyfile or prompt
+// Looks for keyfile in order:
+// 1. Explicit keyfile path (if provided)
+// 2. <credsPath>.keyfile (e.g., credentials.enc.keyfile)
+// 3. keyfile in same directory as credentials
+// 4. Interactive prompt
+func getPassword(credsPath, keyfilePath string) (string, error) {
+	// Try explicit keyfile
+	if keyfilePath != "" {
+		data, err := os.ReadFile(keyfilePath)
+		if err != nil {
+			return "", fmt.Errorf("reading keyfile: %w", err)
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+
+	// Try <credsPath>.keyfile
+	autoKeyfile := credsPath + ".keyfile"
+	if data, err := os.ReadFile(autoKeyfile); err == nil {
+		fmt.Printf("Using keyfile: %s\n", autoKeyfile)
+		return strings.TrimSpace(string(data)), nil
+	}
+
+	// Try keyfile in same directory
+	dirKeyfile := filepath.Join(filepath.Dir(credsPath), "keyfile")
+	if data, err := os.ReadFile(dirKeyfile); err == nil {
+		fmt.Printf("Using keyfile: %s\n", dirKeyfile)
+		return strings.TrimSpace(string(data)), nil
+	}
+
+	// Interactive prompt
+	fmt.Print("Enter encryption password: ")
+	password, err := term.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		return "", fmt.Errorf("reading password: %w", err)
+	}
+	fmt.Println()
+	return string(password), nil
+}
+
+// getNewPassword gets a new password with confirmation
+func getNewPassword(keyfilePath string) (string, error) {
+	// If keyfile provided, use it
+	if keyfilePath != "" {
+		data, err := os.ReadFile(keyfilePath)
+		if err != nil {
+			return "", fmt.Errorf("reading keyfile: %w", err)
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+
+	// Interactive with confirmation
+	fmt.Print("Enter encryption password: ")
+	password, err := term.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		return "", fmt.Errorf("reading password: %w", err)
+	}
+	fmt.Println()
+
+	fmt.Print("Confirm password: ")
+	confirm, err := term.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		return "", fmt.Errorf("reading confirmation: %w", err)
+	}
+	fmt.Println()
+
+	if string(password) != string(confirm) {
+		return "", fmt.Errorf("passwords don't match")
+	}
+
+	return string(password), nil
+}
+
 // addSecret adds a secret to an encrypted credentials file without
 // ever writing plaintext to disk
-func addSecret(credsPath, secretName string) error {
+func addSecret(credsPath, secretName, keyfilePath string) error {
 	// Check if file exists
 	isNew := false
 	if _, err := os.Stat(credsPath); os.IsNotExist(err) {
@@ -24,12 +98,16 @@ func addSecret(credsPath, secretName string) error {
 	}
 
 	// Get password
-	fmt.Print("Enter encryption password: ")
-	password, err := term.ReadPassword(int(syscall.Stdin))
-	if err != nil {
-		return fmt.Errorf("reading password: %w", err)
+	var password string
+	var err error
+	if isNew {
+		password, err = getNewPassword(keyfilePath)
+	} else {
+		password, err = getPassword(credsPath, keyfilePath)
 	}
-	fmt.Println()
+	if err != nil {
+		return err
+	}
 
 	// Load existing credentials or start fresh
 	creds := make(map[string]string)
@@ -40,7 +118,7 @@ func addSecret(credsPath, secretName string) error {
 			return fmt.Errorf("reading file: %w", err)
 		}
 
-		identity, err := age.NewScryptIdentity(string(password))
+		identity, err := age.NewScryptIdentity(password)
 		if err != nil {
 			return fmt.Errorf("creating identity: %w", err)
 		}
@@ -57,18 +135,6 @@ func addSecret(credsPath, secretName string) error {
 
 		if err := yaml.Unmarshal(data, &creds); err != nil {
 			return fmt.Errorf("parsing credentials: %w", err)
-		}
-	} else {
-		// New file - confirm password
-		fmt.Print("Confirm password: ")
-		confirm, err := term.ReadPassword(int(syscall.Stdin))
-		if err != nil {
-			return fmt.Errorf("reading confirmation: %w", err)
-		}
-		fmt.Println()
-
-		if string(password) != string(confirm) {
-			return fmt.Errorf("passwords don't match")
 		}
 	}
 
@@ -90,7 +156,7 @@ func addSecret(credsPath, secretName string) error {
 	}
 
 	// Encrypt
-	recipient, err := age.NewScryptRecipient(string(password))
+	recipient, err := age.NewScryptRecipient(password)
 	if err != nil {
 		return fmt.Errorf("creating recipient: %w", err)
 	}
@@ -113,20 +179,18 @@ func addSecret(credsPath, secretName string) error {
 }
 
 // listSecrets lists secret names (not values) from an encrypted file
-func listSecrets(credsPath string) error {
+func listSecrets(credsPath, keyfilePath string) error {
 	encData, err := os.ReadFile(credsPath)
 	if err != nil {
 		return fmt.Errorf("reading file: %w", err)
 	}
 
-	fmt.Print("Enter encryption password: ")
-	password, err := term.ReadPassword(int(syscall.Stdin))
+	password, err := getPassword(credsPath, keyfilePath)
 	if err != nil {
-		return fmt.Errorf("reading password: %w", err)
+		return err
 	}
-	fmt.Println()
 
-	identity, err := age.NewScryptIdentity(string(password))
+	identity, err := age.NewScryptIdentity(password)
 	if err != nil {
 		return fmt.Errorf("creating identity: %w", err)
 	}
@@ -154,20 +218,18 @@ func listSecrets(credsPath string) error {
 }
 
 // removeSecret removes a secret from an encrypted file
-func removeSecret(credsPath, secretName string) error {
+func removeSecret(credsPath, secretName, keyfilePath string) error {
 	encData, err := os.ReadFile(credsPath)
 	if err != nil {
 		return fmt.Errorf("reading file: %w", err)
 	}
 
-	fmt.Print("Enter encryption password: ")
-	password, err := term.ReadPassword(int(syscall.Stdin))
+	password, err := getPassword(credsPath, keyfilePath)
 	if err != nil {
-		return fmt.Errorf("reading password: %w", err)
+		return err
 	}
-	fmt.Println()
 
-	identity, err := age.NewScryptIdentity(string(password))
+	identity, err := age.NewScryptIdentity(password)
 	if err != nil {
 		return fmt.Errorf("creating identity: %w", err)
 	}
@@ -195,7 +257,7 @@ func removeSecret(credsPath, secretName string) error {
 
 	// Re-encrypt
 	plaintext, _ := yaml.Marshal(creds)
-	recipient, _ := age.NewScryptRecipient(string(password))
+	recipient, _ := age.NewScryptRecipient(password)
 
 	var encrypted bytes.Buffer
 	writer, _ := age.Encrypt(&encrypted, recipient)
@@ -211,7 +273,7 @@ func removeSecret(credsPath, secretName string) error {
 }
 
 // initCredentials creates a new encrypted credentials file
-func initCredentials(credsPath string) error {
+func initCredentials(credsPath, keyfilePath string) error {
 	if _, err := os.Stat(credsPath); err == nil {
 		fmt.Print("File exists. Overwrite? [y/N]: ")
 		reader := bufio.NewReader(os.Stdin)
@@ -221,29 +283,16 @@ func initCredentials(credsPath string) error {
 		}
 	}
 
-	fmt.Print("Enter encryption password: ")
-	password, err := term.ReadPassword(int(syscall.Stdin))
+	password, err := getNewPassword(keyfilePath)
 	if err != nil {
-		return fmt.Errorf("reading password: %w", err)
-	}
-	fmt.Println()
-
-	fmt.Print("Confirm password: ")
-	confirm, err := term.ReadPassword(int(syscall.Stdin))
-	if err != nil {
-		return fmt.Errorf("reading confirmation: %w", err)
-	}
-	fmt.Println()
-
-	if string(password) != string(confirm) {
-		return fmt.Errorf("passwords don't match")
+		return err
 	}
 
 	// Create empty credentials
 	creds := map[string]string{}
 	plaintext, _ := yaml.Marshal(creds)
 
-	recipient, _ := age.NewScryptRecipient(string(password))
+	recipient, _ := age.NewScryptRecipient(password)
 	var encrypted bytes.Buffer
 	writer, _ := age.Encrypt(&encrypted, recipient)
 	writer.Write(plaintext)
