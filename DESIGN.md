@@ -146,7 +146,7 @@ After consideration of cross-platform support (Linux + macOS) and multi-machine 
 
 ### Why TCP (not Unix socket only)?
 
-1. **Multi-machine isolation**: Credentials can live on a physically separate machine (e.g., Mac Mini), agent runs elsewhere (e.g., beelink2)
+1. **Multi-machine isolation**: Credentials can live on a physically separate machine, agent runs elsewhere
 2. **Tailscale integration**: Service binds to Tailscale IP, gets node identity for free
 3. **Cross-platform**: TCP works identically on Linux and macOS
 4. **Can still do local**: Bind to 127.0.0.1 for single-machine setups
@@ -217,8 +217,8 @@ Every request logged:
 ```json
 {
   "ts": "2026-02-02T03:45:00Z",
-  "client": "100.100.132.21",
-  "tailscale_node": "beelink2",
+  "client": "100.64.1.100",
+  "tailscale_node": "agent-host",
   "tool": "gog",
   "args": ["gmail", "search", "is:unread"],
   "exit_code": 0,

@@ -22,7 +22,7 @@ type Config struct {
 
 // ServerConfig defines server binding options.
 type ServerConfig struct {
-	Listen string `yaml:"listen"` // e.g., "127.0.0.1:9876" or "100.100.132.22:9876"
+	Listen string `yaml:"listen"` // e.g., "127.0.0.1:9876" or Tailscale IP
 	Audit  string `yaml:"audit"`  // Path to audit log file (optional)
 }
 

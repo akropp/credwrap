@@ -42,7 +42,8 @@ tools:
       - env: SSH_AUTH_SOCK
         secret: ssh-agent-socket
     # Only allow connecting to specific hosts
-    args_pattern: "^(mac-mini|beelink2|adams-macbook-pro)(\\.tailcd0984\\.ts\\.net)?$"
+    # Only allow connecting to specific hosts (customize for your environment)
+    args_pattern: "^[a-zA-Z0-9.-]+$"
 
   # curl with API key injection
   curl-anthropic:

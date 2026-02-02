@@ -105,18 +105,18 @@ credwrap gog gmail search 'is:unread'
 For maximum security, run the server on a separate machine (e.g., over Tailscale):
 
 ```yaml
-# Server on mac-mini
+# Server on credential-host (e.g., a separate secure machine)
 server:
-  listen: "100.100.132.22:9876"  # Tailscale IP
+  listen: "100.64.1.50:9876"  # Tailscale IP
 ```
 
 ```yaml
-# Client on beelink2
-server: "100.100.132.22:9876"
+# Client on agent-host
+server: "100.64.1.50:9876"
 token: "your-token"
 ```
 
-The agent on beelink2 can use credentials, but they never leave mac-mini.
+The agent can use credentials, but they never leave the credential host.
 
 ## Security Model
 
@@ -138,7 +138,7 @@ Every command is logged:
 ```json
 {
   "ts": "2026-02-02T03:45:00Z",
-  "client": "100.100.132.21:54321",
+  "client": "127.0.0.1:54321",
   "tool": "gog",
   "args": ["gmail", "search", "is:unread"],
   "exit_code": 0,
@@ -149,50 +149,86 @@ Every command is logged:
 
 ## Encryption
 
-Credentials should be encrypted at rest using [age](https://github.com/FiloSottile/age).
+Credentials are encrypted at rest using [age](https://github.com/FiloSottile/age). **Secrets never need to touch disk in plaintext.**
 
-### Install age
-
-```bash
-# macOS
-brew install age
-
-# Debian/Ubuntu
-apt install age
-
-# From source
-go install filippo.io/age/cmd/age@latest
-```
-
-### Encrypt your credentials
+### Managing secrets (recommended method)
 
 ```bash
-# Using the helper script
-./scripts/encrypt-credentials.sh credentials.yaml credentials.enc
+# Initialize a new encrypted credentials file
+credwrap-server secrets init credentials.enc
 
-# Or directly with age
-age -p -o credentials.enc credentials.yaml
+# Add a secret (prompts for value - never written to disk in plaintext)
+credwrap-server secrets add credentials.enc gog-password
+credwrap-server secrets add credentials.enc api-key
+
+# List secret names (not values)
+credwrap-server secrets list credentials.enc
+
+# Remove a secret
+credwrap-server secrets rm credentials.enc old-secret
 ```
 
-### Start server with encrypted credentials
+### Starting the server
 
+**Interactive (prompted for password):**
 ```bash
 credwrap-server --config config.yaml \
                 --credentials credentials.enc \
                 --encrypted
-# Enter decryption password when prompted
 ```
 
-### Security notes
+**Unattended with keyfile (for systemd/launchd):**
+```bash
+# Create a keyfile containing your password
+echo "your-password" > /path/to/keyfile
+chmod 600 /path/to/keyfile
+chown credwrap:credwrap /path/to/keyfile  # if using separate user
 
-- The password is only held in memory while the server runs
-- Credentials are decrypted once at startup, never written to disk
-- Use a strong password (the encryption is scrypt-based)
-- Delete the plaintext credentials.yaml after encrypting
+# Start with keyfile
+credwrap-server --config config.yaml \
+                --credentials credentials.enc \
+                --encrypted \
+                --keyfile /path/to/keyfile
+```
 
-## Production Deployment
+### Security tradeoffs
 
-For maximum security, run the server as a separate user:
+| Mode | Security | Convenience |
+|------|----------|-------------|
+| Password prompt | Highest - requires human | Must restart manually after reboot |
+| Keyfile | Medium - file must be protected | Auto-start works |
+| Plaintext creds | Lowest - relies only on permissions | Simplest setup |
+
+For most users, **keyfile + file permissions** is a good balance.
+
+## Deployment Options
+
+### Option 1: Local user with encryption (simplest)
+
+Run as your own user with encrypted credentials:
+
+```bash
+# Set up config directory
+mkdir -p ~/.config/credwrap
+
+# Create config (edit to add your tools)
+cp examples/server-config.yaml ~/.config/credwrap/config.yaml
+
+# Initialize encrypted credentials
+credwrap-server secrets init ~/.config/credwrap/credentials.enc
+
+# Add your secrets
+credwrap-server secrets add ~/.config/credwrap/credentials.enc gog-password
+
+# Start the server
+credwrap-server --config ~/.config/credwrap/config.yaml \
+                --credentials ~/.config/credwrap/credentials.enc \
+                --encrypted
+```
+
+Security: relies on encryption (password required to start).
+
+### Option 2: Separate user (Linux - maximum security)
 
 ```bash
 # Download and run setup script
@@ -205,23 +241,70 @@ sudo ./scripts/setup-server.sh --user credwrap --port 9876 --bind 127.0.0.1
 This creates:
 - System user `credwrap` (no login shell)
 - Config at `/etc/credwrap/config.yaml`
-- Credentials at `/etc/credwrap/credentials.yaml`
 - Systemd service `credwrap.service`
-- Audit log at `/var/log/credwrap/audit.log`
 
-### Systemd commands
+**Systemd with encrypted credentials:**
+```bash
+# Add secrets
+sudo -u credwrap credwrap-server secrets init /etc/credwrap/credentials.enc
+sudo -u credwrap credwrap-server secrets add /etc/credwrap/credentials.enc gog-password
+
+# Create keyfile for unattended startup
+sudo bash -c 'echo "your-password" > /etc/credwrap/keyfile'
+sudo chmod 600 /etc/credwrap/keyfile
+sudo chown credwrap:credwrap /etc/credwrap/keyfile
+
+# Edit service to use --encrypted --keyfile
+sudo systemctl edit credwrap
+# Add: ExecStart= line with --encrypted --keyfile /etc/credwrap/keyfile
+
+sudo systemctl restart credwrap
+```
+
+**Systemd commands:**
+```bash
+sudo systemctl start credwrap
+sudo systemctl stop credwrap
+sudo systemctl status credwrap
+sudo journalctl -u credwrap -f
+```
+
+### Option 3: macOS with launchd
 
 ```bash
-sudo systemctl start credwrap     # Start
-sudo systemctl stop credwrap      # Stop
-sudo systemctl restart credwrap   # Restart
-sudo systemctl status credwrap    # Check status
-sudo journalctl -u credwrap -f    # View logs
+# User service (runs as you)
+./scripts/setup-macos.sh --user-service
+
+# System service (runs as dedicated user)
+sudo ./scripts/setup-macos.sh --system-service
+```
+
+**launchd with encrypted credentials:**
+```bash
+# Initialize credentials
+credwrap-server secrets init ~/.config/credwrap/credentials.enc
+
+# Add secrets
+credwrap-server secrets add ~/.config/credwrap/credentials.enc api-key
+
+# Create keyfile for unattended startup
+echo "your-password" > ~/.config/credwrap/keyfile
+chmod 600 ~/.config/credwrap/keyfile
+
+# Load service
+launchctl load ~/Library/LaunchAgents/com.credwrap.server.plist
+```
+
+**launchd commands:**
+```bash
+launchctl start com.credwrap.server
+launchctl stop com.credwrap.server
+launchctl list | grep credwrap
 ```
 
 ### Agent user setup
 
-The agent user (e.g., `clawd`) only needs the client config:
+The agent user only needs the client config:
 
 ```yaml
 # ~/.credwrap.yaml
@@ -230,7 +313,7 @@ token: "your-token-from-server-config"
 ```
 
 The agent can execute `credwrap <tool> [args]` but cannot:
-- Read `/etc/credwrap/credentials.yaml` (wrong user)
+- Read credential files (wrong user or encrypted)
 - Query the server for credential values (no such API)
 - Execute tools not in the allowlist
 
