@@ -1,0 +1,54 @@
+# credwrap-server configuration example
+
+server:
+  # Address to listen on
+  # Use 127.0.0.1 for local-only, or Tailscale IP for multi-machine
+  listen: "127.0.0.1:9876"
+  
+  # Audit log path (optional)
+  audit: "/var/log/credwrap/audit.log"
+
+auth:
+  # Allowed tokens (at least one required)
+  tokens:
+    - "your-secret-token-here"
+  
+  # Allowed Tailscale node IDs (optional, for Tailscale auth)
+  # tailscale_nodes:
+  #   - "nodekey:abc123..."
+
+# Tool definitions
+tools:
+  # Google Workspace CLI
+  gog:
+    path: /home/clawd/.npm-global/bin/gog
+    credentials:
+      - env: GOG_KEYRING_PASSWORD
+        secret: gog-keyring-password
+    pass_args: true
+
+  # Twitter/X CLI
+  bird:
+    path: /home/clawd/.npm-global/bin/bird
+    credentials:
+      - env: BIRD_COOKIES
+        secret: bird-cookies
+    pass_args: true
+
+  # SSH with restricted hosts
+  ssh:
+    path: /usr/bin/ssh
+    credentials:
+      - env: SSH_AUTH_SOCK
+        secret: ssh-agent-socket
+    # Only allow connecting to specific hosts
+    args_pattern: "^(mac-mini|beelink2|adams-macbook-pro)(\\.tailcd0984\\.ts\\.net)?$"
+
+  # curl with API key injection
+  curl-anthropic:
+    path: /usr/bin/curl
+    credentials:
+      - env: ANTHROPIC_API_KEY
+        secret: anthropic-api-key
+    # Could add header injection in future
+    pass_args: true

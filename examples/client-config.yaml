@@ -1,0 +1,5 @@
+# credwrap client configuration
+# Place at ~/.credwrap.yaml or ~/.config/credwrap/client.yaml
+
+server: "127.0.0.1:9876"
+token: "your-secret-token-here"
