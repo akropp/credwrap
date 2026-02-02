@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/openclaw/credwrap/internal/config"
@@ -68,7 +69,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("Failed to read keyfile: %v", err)
 			}
-			password = string(data)
+			password = strings.TrimSpace(string(data))
 		} else {
 			// Prompt for password
 			fmt.Print("Enter decryption password: ")
