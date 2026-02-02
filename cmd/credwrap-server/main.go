@@ -176,16 +176,26 @@ func handleToolsCommand() {
 		fmt.Println("Usage: credwrap-server tools <command> [args]")
 		fmt.Println("")
 		fmt.Println("Commands:")
-		fmt.Println("  add CONFIG NAME PATH [--env VAR]...")
+		fmt.Println("  add CONFIG NAME PATH [options]")
 		fmt.Println("      Copy tool to /usr/local/bin and add to config")
-		fmt.Println("      --env VAR   Environment variable for credential injection (repeatable)")
+		fmt.Println("")
+		fmt.Println("      Options:")
+		fmt.Println("        --env VAR     Environment variable for credential (repeatable)")
+		fmt.Println("        --symlink     Create symlink instead of copying")
+		fmt.Println("        --no-copy     Don't copy; use original path in config")
 		fmt.Println("")
 		fmt.Println("  list CONFIG     List configured tools")
 		fmt.Println("  rm CONFIG NAME  Remove tool from config")
 		fmt.Println("")
 		fmt.Println("Examples:")
+		fmt.Println("  # Copy binary to /usr/local/bin")
 		fmt.Println("  sudo credwrap-server tools add /etc/credwrap/config.yaml gog ~/.local/bin/gog --env GOG_KEYRING_PASSWORD")
-		fmt.Println("  credwrap-server tools list /etc/credwrap/config.yaml")
+		fmt.Println("")
+		fmt.Println("  # Symlink for tools that can't be copied (e.g., pnpm scripts)")
+		fmt.Println("  sudo credwrap-server tools add /etc/credwrap/config.yaml bird ~/.local/share/pnpm/bird --symlink")
+		fmt.Println("")
+		fmt.Println("  # Just add to config without copying (when credwrap has access)")
+		fmt.Println("  sudo credwrap-server tools add /etc/credwrap/config.yaml gemini /usr/bin/gemini --no-copy")
 		os.Exit(1)
 	}
 
@@ -194,23 +204,31 @@ func handleToolsCommand() {
 
 	switch cmd {
 	case "add":
-		if len(os.Args) < 5 {
-			log.Fatal("Usage: credwrap-server tools add CONFIG NAME PATH [--env VAR]...")
+		if len(os.Args) < 6 {
+			log.Fatal("Usage: credwrap-server tools add CONFIG NAME PATH [--env VAR] [--symlink] [--no-copy]")
 		}
 		configPath := os.Args[3]
 		toolName := os.Args[4]
 		toolPath := os.Args[5]
 
-		// Parse --env flags
+		// Parse flags
 		var envVars []string
+		var opts ToolAddOptions
 		for i := 6; i < len(os.Args); i++ {
-			if os.Args[i] == "--env" && i+1 < len(os.Args) {
-				envVars = append(envVars, os.Args[i+1])
-				i++
+			switch os.Args[i] {
+			case "--env":
+				if i+1 < len(os.Args) {
+					envVars = append(envVars, os.Args[i+1])
+					i++
+				}
+			case "--symlink":
+				opts.Symlink = true
+			case "--no-copy":
+				opts.NoCopy = true
 			}
 		}
 
-		err = toolsAdd(configPath, toolName, toolPath, envVars)
+		err = toolsAdd(configPath, toolName, toolPath, envVars, opts)
 
 	case "list":
 		if len(os.Args) < 4 {

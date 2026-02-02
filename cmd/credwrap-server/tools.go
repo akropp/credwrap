@@ -10,9 +10,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// toolsAdd copies a tool to /usr/local/bin and adds it to the config
-func toolsAdd(configPath, toolName, sourcePath string, credentialEnvs []string) error {
+// ToolAddOptions holds options for toolsAdd
+type ToolAddOptions struct {
+	Symlink bool // Create symlink instead of copying
+	NoCopy  bool // Don't copy, just add to config with original path
+}
+
+// toolsAdd copies/symlinks a tool to /usr/local/bin and adds it to the config
+func toolsAdd(configPath, toolName, sourcePath string, credentialEnvs []string, opts ToolAddOptions) error {
 	// Validate source exists
+	sourcePath, err := filepath.Abs(sourcePath)
+	if err != nil {
+		return fmt.Errorf("resolving path: %w", err)
+	}
+	
 	info, err := os.Stat(sourcePath)
 	if err != nil {
 		return fmt.Errorf("source not found: %w", err)
@@ -21,29 +32,53 @@ func toolsAdd(configPath, toolName, sourcePath string, credentialEnvs []string) 
 		return fmt.Errorf("source is a directory, expected executable")
 	}
 
-	// Determine destination
-	destDir := "/usr/local/bin"
-	destPath := filepath.Join(destDir, filepath.Base(sourcePath))
+	var finalPath string
 
-	// Check if we can write to dest (need sudo)
-	if err := checkWritable(destDir); err != nil {
-		return fmt.Errorf("cannot write to %s (try running with sudo): %w", destDir, err)
-	}
+	if opts.NoCopy {
+		// Just use the original path
+		finalPath = sourcePath
+		fmt.Printf("Using original path: %s\n", finalPath)
+		fmt.Println("Note: credwrap user must have execute permission on this path")
+	} else {
+		// Determine destination
+		destDir := "/usr/local/bin"
+		destPath := filepath.Join(destDir, filepath.Base(sourcePath))
 
-	// Copy the file
-	fmt.Printf("Copying %s -> %s\n", sourcePath, destPath)
-	if err := copyFile(sourcePath, destPath); err != nil {
-		return fmt.Errorf("copying file: %w", err)
-	}
+		// Check if we can write to dest (need sudo)
+		if err := checkWritable(destDir); err != nil {
+			return fmt.Errorf("cannot write to %s (try running with sudo): %w", destDir, err)
+		}
 
-	// Make executable
-	if err := os.Chmod(destPath, 0755); err != nil {
-		return fmt.Errorf("chmod: %w", err)
+		if opts.Symlink {
+			// Create symlink
+			fmt.Printf("Symlinking %s -> %s\n", destPath, sourcePath)
+			
+			// Remove existing file/symlink if present
+			os.Remove(destPath)
+			
+			if err := os.Symlink(sourcePath, destPath); err != nil {
+				return fmt.Errorf("creating symlink: %w", err)
+			}
+			fmt.Println("Note: credwrap user must have execute permission on the source path")
+		} else {
+			// Copy the file
+			fmt.Printf("Copying %s -> %s\n", sourcePath, destPath)
+			if err := copyFile(sourcePath, destPath); err != nil {
+				return fmt.Errorf("copying file: %w", err)
+			}
+
+			// Make executable
+			if err := os.Chmod(destPath, 0755); err != nil {
+				return fmt.Errorf("chmod: %w", err)
+			}
+		}
+		
+		finalPath = destPath
 	}
 
 	// Update config
 	fmt.Printf("Updating config: %s\n", configPath)
-	if err := addToolToConfig(configPath, toolName, destPath, credentialEnvs); err != nil {
+	if err := addToolToConfig(configPath, toolName, finalPath, credentialEnvs); err != nil {
 		return fmt.Errorf("updating config: %w", err)
 	}
 

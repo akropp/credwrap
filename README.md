@@ -317,6 +317,54 @@ The agent can execute `credwrap <tool> [args]` but cannot:
 - Query the server for credential values (no such API)
 - Execute tools not in the allowlist
 
+### Adding tools
+
+**For standalone binaries (Go, Rust, etc.):**
+```bash
+sudo credwrap-server tools add /etc/credwrap/config.yaml gog ~/.local/bin/gog --env GOG_KEYRING_PASSWORD
+```
+This copies the binary to `/usr/local/bin` and updates the config.
+
+**For interpreted tools (npm/pnpm, pip, etc.):**
+
+These have dependencies that can't be simply copied. Options:
+
+1. **Grant credwrap access to your user paths (simplest):**
+   ```bash
+   # Add credwrap to your group
+   sudo usermod -aG $(whoami) credwrap
+   
+   # Make paths accessible
+   chmod g+rx $HOME
+   chmod -R g+rX $HOME/.local
+   
+   # Add tool without copying
+   sudo credwrap-server tools add /etc/credwrap/config.yaml bird \
+       ~/.local/share/pnpm/bird --no-copy --env BIRD_AUTH
+   
+   # Restart for group change to take effect
+   sudo systemctl restart credwrap
+   ```
+
+2. **Install globally:**
+   ```bash
+   sudo npm install -g @steipete/bird
+   sudo credwrap-server tools add /etc/credwrap/config.yaml bird \
+       /usr/local/bin/bird --no-copy --env BIRD_AUTH
+   ```
+
+3. **Symlink (requires source path permissions):**
+   ```bash
+   sudo credwrap-server tools add /etc/credwrap/config.yaml bird \
+       ~/.local/share/pnpm/bird --symlink --env BIRD_AUTH
+   ```
+
+**For system tools already in /usr/bin:**
+```bash
+sudo credwrap-server tools add /etc/credwrap/config.yaml gemini \
+    /usr/bin/gemini --no-copy --env GEMINI_API_KEY
+```
+
 ## License
 
 MIT
