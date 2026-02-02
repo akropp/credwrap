@@ -118,6 +118,8 @@ token: "your-token"
 
 The agent can use credentials, but they never leave the credential host.
 
+**Important:** In multi-machine setups, tools must be installed on the credential host (where credwrap-server runs), not the agent host. The server executes tools locally and streams the output back. This is by design — credentials never travel to the agent machine.
+
 ## Security Model
 
 ### What the agent CAN do:
