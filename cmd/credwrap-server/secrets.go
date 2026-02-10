@@ -217,6 +217,47 @@ func listSecrets(credsPath, keyfilePath string) error {
 	return nil
 }
 
+// showSecret shows the value of a specific secret
+func showSecret(credsPath, secretName, keyfilePath string) error {
+	encData, err := os.ReadFile(credsPath)
+	if err != nil {
+		return fmt.Errorf("reading file: %w", err)
+	}
+
+	password, err := getPassword(credsPath, keyfilePath)
+	if err != nil {
+		return err
+	}
+
+	identity, err := age.NewScryptIdentity(password)
+	if err != nil {
+		return fmt.Errorf("creating identity: %w", err)
+	}
+
+	reader, err := age.Decrypt(bytes.NewReader(encData), identity)
+	if err != nil {
+		return fmt.Errorf("decrypting (wrong password?): %w", err)
+	}
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("reading: %w", err)
+	}
+
+	var creds map[string]string
+	if err := yaml.Unmarshal(data, &creds); err != nil {
+		return fmt.Errorf("parsing: %w", err)
+	}
+
+	value, exists := creds[secretName]
+	if !exists {
+		return fmt.Errorf("secret '%s' not found", secretName)
+	}
+
+	fmt.Printf("%s: %s\n", secretName, value)
+	return nil
+}
+
 // removeSecret removes a secret from an encrypted file
 func removeSecret(credsPath, secretName, keyfilePath string) error {
 	encData, err := os.ReadFile(credsPath)

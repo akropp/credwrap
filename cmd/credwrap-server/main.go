@@ -27,6 +27,7 @@ Secrets management:
   credwrap-server secrets init FILE    Create new encrypted credentials file
   credwrap-server secrets add FILE KEY Add a secret (never touches disk in plaintext)
   credwrap-server secrets list FILE    List secret names
+  credwrap-server secrets show FILE KEY Show secret value (decrypts and displays)
   credwrap-server secrets rm FILE KEY  Remove a secret
 
 Tools management:
@@ -130,6 +131,7 @@ func handleSecretsCommand() {
 		fmt.Println("  init FILE        Create new encrypted credentials file")
 		fmt.Println("  add FILE KEY     Add/update a secret")
 		fmt.Println("  list FILE        List secret names (not values)")
+		fmt.Println("  show FILE KEY    Show secret value (decrypts and displays)")
 		fmt.Println("  rm FILE KEY      Remove a secret")
 		fmt.Println("")
 		fmt.Println("Options:")
@@ -178,6 +180,12 @@ func handleSecretsCommand() {
 			log.Fatal("Usage: credwrap-server secrets list FILE [--keyfile FILE]")
 		}
 		err = listSecrets(args[1], keyfilePath)
+
+	case "show":
+		if len(args) < 3 {
+			log.Fatal("Usage: credwrap-server secrets show FILE KEY [--keyfile FILE]")
+		}
+		err = showSecret(args[1], args[2], keyfilePath)
 
 	case "rm", "remove", "delete":
 		if len(args) < 3 {
